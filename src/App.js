@@ -12,7 +12,7 @@ const LoadingScreen = ({ progress }) => {
       left: 0,
       right: 0,
       bottom: 0,
-      background: '#000',
+      background: 'linear-gradient(180deg, #0E2840 0%, #091928 50%, #020509 100%)',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
@@ -83,61 +83,88 @@ const LoadingScreen = ({ progress }) => {
 };
 
 const WaveEffect = ({ reduceMotion }) => {
-  const waveRef = useRef();
-  const wave2Ref = useRef();
-  const wave3Ref = useRef();
+  const aura1Ref = useRef();
+  const aura2Ref = useRef();
+  const aura3Ref = useRef();
+  const glowRef = useRef();
+  const innerGlowRef = useRef();
 
-  const waveGeometry = useMemo(() => {
-    return new THREE.RingGeometry(1.0, 5.0, 64);
-  }, []);
+  const auraGeometry = useMemo(() => new THREE.CircleGeometry(6, 128), []);
+  const glowGeometry = useMemo(() => new THREE.CircleGeometry(4, 64), []);
 
-  const waveMaterial = useMemo(() => {
+  const auraMaterial = useMemo(() => {
     return new THREE.ShaderMaterial({
       uniforms: {
-        time: { value: 0 },
-        opacity: { value: 1.0 }
+        time: { value: 0 }
       },
       vertexShader: `
-        uniform float time;
         varying vec2 vUv;
-        varying float vDistance;
-        
         void main() {
           vUv = uv;
-          vec3 pos = position;
-          
-          float radius = length(pos.xy);
-          vDistance = radius;
-          
-          float wave = sin(radius * 4.0 - time * 2.5) * 0.15;
-          pos.z += wave * (1.0 - radius / 5.0);
-          
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
       `,
       fragmentShader: `
         uniform float time;
-        uniform float opacity;
         varying vec2 vUv;
-        varying float vDistance;
         
         void main() {
-          float fadeEdge = 1.0 - smoothstep(4.2, 5.0, vDistance);
-          float fadeCenter = smoothstep(1.0, 1.8, vDistance);
+          vec2 center = vUv - 0.5;
+          float dist = length(center);
+          float angle = atan(center.y, center.x);
           
-          float ripple = sin(vDistance * 6.0 - time * 3.0) * 0.5 + 0.5;
-          float pulse = sin(time * 1.2) * 0.3 + 0.7;
+          float wave1 = sin(dist * 8.0 - time * 0.8 + angle * 2.0) * 0.5 + 0.5;
+          float wave2 = sin(dist * 12.0 + time * 0.6 - angle) * 0.5 + 0.5;
+          float pulse = sin(time * 0.5) * 0.2 + 0.8;
           
-          float alpha = fadeEdge * fadeCenter * ripple * pulse * opacity * 0.35;
+          float glow = 1.0 - smoothstep(0.1, 0.5, dist);
+          float softEdge = 1.0 - smoothstep(0.35, 0.5, dist);
           
-          vec3 color = mix(vec3(0.05, 0.2, 0.5), vec3(0.3, 0.9, 1.0), ripple);
-          color += vec3(0.1, 0.3, 0.5) * pulse * 0.3;
+          vec3 cyan = vec3(0.3, 0.8, 0.9);
+          vec3 blue = vec3(0.2, 0.5, 0.9);
+          vec3 white = vec3(0.9, 0.95, 1.0);
+          
+          vec3 color = mix(cyan, blue, wave1 * 0.6);
+          color = mix(color, white, glow * 0.4);
+          
+          float alpha = softEdge * (wave1 * 0.3 + wave2 * 0.2) * pulse * 0.4;
+          gl_FragColor = vec4(color, alpha);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending
+    });
+  }, []);
+
+  const glowMaterial = useMemo(() => {
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        time: { value: 0 }
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float time;
+        varying vec2 vUv;
+        
+        void main() {
+          vec2 center = vUv - 0.5;
+          float dist = length(center);
+          float pulse = sin(time * 0.6) * 0.25 + 0.75;
+          float glow = pow(1.0 - smoothstep(0.0, 0.5, dist), 2.5);
+          
+          vec3 color = vec3(0.5, 0.85, 0.95);
+          float alpha = glow * pulse * 0.5;
           
           gl_FragColor = vec4(color, alpha);
         }
       `,
       transparent: true,
-      side: THREE.DoubleSide,
       blending: THREE.AdditiveBlending
     });
   }, []);
@@ -147,30 +174,27 @@ const WaveEffect = ({ reduceMotion }) => {
     
     const time = state.clock.elapsedTime;
     
-    if (waveMaterial?.uniforms?.time) {
-      waveMaterial.uniforms.time.value = time;
+    if (auraMaterial?.uniforms?.time) {
+      auraMaterial.uniforms.time.value = time;
+    }
+    if (glowMaterial?.uniforms?.time) {
+      glowMaterial.uniforms.time.value = time;
     }
     
-    if (waveRef.current) {
-      waveRef.current.rotation.z = time * 0.07;
-    }
-    if (wave2Ref.current) {
-      wave2Ref.current.rotation.z = -time * 0.105;
-    }
-    if (wave3Ref.current) {
-      wave3Ref.current.rotation.z = time * 0.056;
-    }
+    if (aura1Ref.current) aura1Ref.current.rotation.z = time * 0.05;
+    if (aura2Ref.current) aura2Ref.current.rotation.z = -time * 0.08;
+    if (aura3Ref.current) aura3Ref.current.rotation.z = time * 0.03;
   });
 
   if (reduceMotion) return null;
 
   return (
     <group position={[0, 0, -2.5]}>
-      <mesh ref={waveRef} geometry={waveGeometry} material={waveMaterial} />
-      <mesh ref={wave2Ref} geometry={waveGeometry} material={waveMaterial} 
-            position={[0, 0, -0.3]} scale={[0.8, 0.8, 1]} />
-      <mesh ref={wave3Ref} geometry={waveGeometry} material={waveMaterial} 
-            position={[0, 0, -0.6]} scale={[1.2, 1.2, 1]} />
+      <mesh ref={glowRef} geometry={glowGeometry} material={glowMaterial} />
+      <mesh ref={innerGlowRef} geometry={glowGeometry} material={glowMaterial} scale={0.6} />
+      <mesh ref={aura1Ref} geometry={auraGeometry} material={auraMaterial} />
+      <mesh ref={aura2Ref} geometry={auraGeometry} material={auraMaterial} position={[0, 0, -0.3]} />
+      <mesh ref={aura3Ref} geometry={auraGeometry} material={auraMaterial} scale={0.85} position={[0, 0, -0.6]} />
     </group>
   );
 };
@@ -335,7 +359,7 @@ const App = () => {
         height: '100vh', 
         display: 'flex',
         flexDirection: 'column',
-        backgroundColor: '#000'
+        background: 'linear-gradient(180deg, #0E2840 0%, #091928 50%, #020509 100%)',
       }}>
       <div style={{
         flex: '0 0 auto',
@@ -348,8 +372,6 @@ const App = () => {
           padding: '1rem',
           marginBottom: '2rem',
           textAlign: 'center',
-          boxShadow: showGlow && !reduceMotion ? '0 0 40px rgba(255, 255, 255, 0.1)' : 'none',
-          animation: showGlow && !reduceMotion ? 'pulseGlow 2s ease-in-out 2' : 'none',
           borderRadius: '10px'
         }}>
           {[
@@ -357,59 +379,46 @@ const App = () => {
             "Stay close, growth is about to get sorted."
           ].map((line, lineIndex) => (
             <div key={lineIndex} style={{ marginBottom: lineIndex === 0 ? '0.5rem' : '0' }}>
-              {isTouchDevice ? (
-                <div style={{
-                  color: '#e0e0e0',
-                  fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif',
-                  fontSize: 'clamp(1.125rem, 2.8vw, 1.5rem)',
-                  fontWeight: '700',
-                  lineHeight: '1.6',
-                  letterSpacing: '0.02em',
-                  opacity: textVisible ? 1 : 0,
-                  transition: reduceMotion ? 'none' : 'opacity 0.8s ease'
-                }}>
-                  {line}
-                </div>
-              ) : (
-                line.split(' ').map((word, wordIndex) => (
-                  <span
-                    key={wordIndex}
-                    style={{
-                      display: 'inline-block',
-                      margin: '0 0.25rem',
-                      fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif',
-                      fontSize: 'clamp(1.125rem, 2.8vw, 1.5rem)',
-                      fontWeight: '700',
-                      lineHeight: '1.6',
-                      letterSpacing: '0.02em',
-                      color: '#e0e0e0',
-                      cursor: 'pointer',
-                      transition: reduceMotion ? 'none' : 'all 0.4s ease-in-out'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!reduceMotion) {
-                        e.currentTarget.style.background = 'linear-gradient(90deg, #0099ff, #00ffff, #9933ff, #0099ff)';
-                        e.currentTarget.style.backgroundSize = '200% auto';
-                        e.currentTarget.style.webkitBackgroundClip = 'text';
-                        e.currentTarget.style.webkitTextFillColor = 'transparent';
-                        e.currentTarget.style.backgroundClip = 'text';
-                        e.currentTarget.style.animation = 'shimmer 2s linear infinite';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!reduceMotion) {
-                        e.currentTarget.style.background = 'none';
-                        e.currentTarget.style.webkitTextFillColor = '#e0e0e0';
-                        e.currentTarget.style.animation = 'none';
-                      }
-                    }}
-                  >
-                    {word}
-                  </span>
-                ))
-              )}
+              {line.split(' ').map((word, wordIndex) => (
+                <span
+                  key={wordIndex}
+                  style={{
+                    display: 'inline-block',
+                    margin: '0 0.25rem',
+                    fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif',
+                    fontSize: 'clamp(1.125rem, 2.8vw, 1.5rem)',
+                    fontWeight: '700',
+                    lineHeight: '1.6',
+                    letterSpacing: '0.02em',
+                    color: '#F9F8F4',
+                    cursor: 'pointer',
+                    transition: reduceMotion ? 'none' : 'all 0.4s ease-in-out'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!reduceMotion) {
+                      e.currentTarget.style.background = 'linear-gradient(135deg, #4dd0e1, #80deea, #b2ebf2, #4dd0e1)';
+                      e.currentTarget.style.backgroundSize = '300% 300%';
+                      e.currentTarget.style.webkitBackgroundClip = 'text';
+                      e.currentTarget.style.webkitTextFillColor = 'transparent';
+                      e.currentTarget.style.backgroundClip = 'text';
+                      e.currentTarget.style.animation = 'shimmer 3s ease-in-out infinite';
+                      e.currentTarget.style.transform = 'scale(1.05)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!reduceMotion) {
+                      e.currentTarget.style.background = 'none';
+                      e.currentTarget.style.webkitTextFillColor = '#F9F8F4';
+                      e.currentTarget.style.animation = 'none';
+                      e.currentTarget.style.transform = 'scale(1)';
+                    }
+                  }}
+                >
+                  {word}
+                </span>
+              ))}
             </div>
-          ))}
+          ))}}
         </div>
         
         <div style={{
@@ -425,8 +434,8 @@ const App = () => {
           lineHeight: '1.1',
           letterSpacing: '0.1em',
           whiteSpace: 'nowrap',
-          textShadow: '0 0 30px rgba(255, 107, 53, 0.3)',
-          filter: 'drop-shadow(0 0 10px rgba(255, 215, 0, 0.4))',
+          textShadow: '0 0 30px rgba(77, 208, 225, 0.4), 0 2px 8px rgba(0, 0, 0, 0.6)',
+          filter: 'drop-shadow(0 0 15px rgba(77, 208, 225, 0.5))',
           marginBottom: '1.5rem',
           padding: '1rem 0'
         }}>
@@ -467,7 +476,7 @@ const App = () => {
             pointerEvents: 'none'
           }}>
             <div style={{
-              color: '#888888',
+              color: '#A4A8A9',
               fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif',
               fontSize: '0.875rem',
               fontWeight: '300',
@@ -500,7 +509,7 @@ const App = () => {
         textAlign: 'center'
       }}>
         <p style={{
-          color: '#888888',
+          color: '#A4A8A9',
           fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif',
           fontSize: 'clamp(1rem, 2.5vw, 1.25rem)',
           fontWeight: '300',
